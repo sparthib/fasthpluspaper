@@ -119,7 +119,7 @@ plot_fhp_across_k <- function(data, k, t, r){
 
 }
 
-##plot x -axis different k, y is a single r 
+##plot x-axis different k, y is a single r 
 plot_fhp_across_k(easy_balanced_data, k = 6, t = 10, r = 10)
 plot_fhp_across_k(easy_imbalanced_data, k = 6, t = 10, r = 10)
 plot_fhp_across_k(hard_balanced_data, k = 6, t = 10, r = 10)
@@ -138,16 +138,21 @@ plot_fhp_across_r<- function(data, k, t, r){
   
   results <- do.call(rbind, Map(data.frame, rs=rs, fhp_res=fhp_res))
   
+  ##compute hpe value 
+  hpe_res <- fasthplus::hpe(D=dist(data$obs_data), L = k_means$cluster, p = 101)
+  
   ggplot( data = results, aes(x=rs, y=fhp_res))+
     geom_line()+
-    geom_point()
+    geom_point()+
+    ##add hpe_res value 
+    geom_hline(yintercept = hpe_res)
   
 }
 
-plot_fhp_across_k(easy_balanced_data, k = 6, t = 10, r = 10)
-plot_fhp_across_k(easy_imbalanced_data, k = 6, t = 10, r = 10)
-plot_fhp_across_k(hard_balanced_data, k = 6, t = 10, r = 10)
-plot_fhp_across_k(hard_imbalanced_data, k = 6, t = 10, r = 10)
+plot_fhp_across_r(easy_balanced_data, k = 6, t = 10, r = 10)
+plot_fhp_across_r(easy_imbalanced_data, k = 6, t = 10, r = 10)
+plot_fhp_across_r(hard_balanced_data, k = 6, t = 10, r = 10)
+plot_fhp_across_r(hard_imbalanced_data, k = 6, t = 10, r = 10)
 
 
 
