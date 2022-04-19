@@ -6,7 +6,8 @@ library(here)
 library(usethis)
 library(purrr)
 library(ggplot2)
-
+library(dplyr)
+library(reshape2)
 
 ## output directories
 dir_plots <- here::here("simulation_figures", "01_across_r" )
@@ -52,7 +53,23 @@ balance <- c('balanced', 'imbalanced')
 spread_levels <- c('easy', 'hard')
 
 
-simulate_data <- function(balance, spread, n_cells = 1000, n_genes = 500,
+easy_data <- simulate_gauss_mix_k(n_cells = 1000, n_genes = 3,
+                                  k =3, x_mus = c(1 ,5, 10),
+                                  y_mus = c(1,5,10),
+                                  x_sds = c(0.1,0.1,0.1),
+                                  y_sds = c(0.1,0.1,0.1),
+                                  prop1 = c(0.3, 0.4, 0.3))
+
+ks<- seq(4)
+kmeans_for_ks <- ks |> map(function(x) kmeans(easy_data$obs_data, centers =x))
+
+fhp_res <- kmeans_for_ks |> map(function(x) fasthplus::hpb(D = easy_data$obs_data, 
+                                                           L = x$cluster, t = 10, r = 10)) 
+
+p1 <- plot(ks, fhp_res)
+
+
+simulate_data <- function(balance, spread, n_cells = 1000, n_genes = 3,
                           k = 3){ 
   if(spread =='easy'){
     x_mus = c(1 ,5, 10)
@@ -76,51 +93,85 @@ simulate_data <- function(balance, spread, n_cells = 1000, n_genes = 500,
                        x_mus = x_mus, y_mus = y_mus, x_sds = x_sds,
                        y_sds = y_sds, prop1 = prop1
                     )
-  
- 
 }
 
 easy_balanced_data <- simulate_data(balance = 'balanced', spread = 'easy', k = 3)
+
+ks<- 2:6
+kmeans_for_ks <- ks |> map(function(x) kmeans(easy_balanced_data$obs_data, centers =x))
+
+#fhp_res <- kmeans_for_ks |> map(function(x) fasthplus::hpb(D = easy_balanced_data$obs_data, 
+                                                       #    L = x$cluster, t = 10, r = 10)) 
+fhp_res <-kmeans_for_ks |> map(function(x) fasthplus::hpe(D = dist(data$obs_data), 
+                                                          L = x$cluster, 
+                                                          alg = "grid_search",
+                                                          p= 501))
+p2 <- plot(ks, fhp_res)
+
+
+
+
+
 hard_balanced_data <- simulate_data(balance = 'balanced', spread = 'hard', k = 3)
 easy_imbalanced_data <- simulate_data(balance = 'imbalanced', spread = 'easy', k = 3)
 hard_imbalanced_data <- simulate_data(balance = 'imbalanced', spread = 'hard', k =3)
 
 par(mar=c(1, 1, 1, 1))
 #check true data 
-# plot(easy_balanced_data$true_data[,1], easy_balanced_data$true_data[,2])
-# plot(hard_imbalanced_data$true_data[,1], hard_imbalanced_data$true_data[,2])
+plot(easy_balanced_data$true_data[,1], easy_balanced_data$true_data[,2])
+plot(hard_imbalanced_data$true_data[,1], hard_imbalanced_data$true_data[,2],
+     col = c(1,2,3)[hard_imbalanced_data$true_cluster_id])
 
-# plot_fhp is a function that takes simulated data as input
-# performs kmeans for a set of ks 
-# calculates hpb for all ks for a fixed t and r 
-# and plots results 
 
-ks<- seq(4)
-kmeans_for_ks <- ks |> map(function(x) kmeans(easy_balanced_data$obs_data, centers =x))
-  
-fhp_res <- kmeans_for_ks |> map(function(x) fasthplus::hpb(D = easy_balanced_data$obs_data, 
-                                          L = x$cluster, t = 10, r = 10)) 
-
-plot(ks, fhp_res)
 
 
 plot_fhp_across_k <- function(data, k, t, r){
-  ks<- seq(k)
+  ks<- 2:6
   kmeans_for_ks <- ks |> map(function(x) kmeans(data$obs_data, centers =x))
   
-  fhp_res <- kmeans_for_ks |> map(function(x) fasthplus::hpb(D = data$obs_data, 
-                                                             L = x$cluster, t = t, r = r)) 
+  #fhp_res <- kmeans_for_ks |> map(function(x) fasthplus::hpb(D = data$obs_data, 
+                                                             #L = x$cluster, t = t, r = r)) 
+  fhp_res <-kmeans_for_ks |> map(function(x) fasthplus::hpe(D = dist(data$obs_data), 
+                                                            L = x$cluster, 
+                                                            alg = "grid_search",
+                                                            p= 501))
+                                 
   #plot(ks, fhp_res)
   results <- do.call(rbind, Map(data.frame, ks=ks, fhp_res=fhp_res))
   
-  ggplot( data = results, aes(x=ks, y=fhp_res))+
-    geom_line()+
-    geom_point()
+  #ggplot( data = results, aes(x=ks, y=fhp_res))+
+    #geom_line()+
+    #geom_point()
 
 }
 
+
+
+
 ##plot x-axis different k, y is a single r 
 plot_fhp_across_k(easy_balanced_data, k = 6, t = 10, r = 10)
+##replicate calculating hpe for a fixed data
+results_list <- replicate(100, plot_fhp_across_k(easy_balanced_data, 
+                                                  k = 6, t = 10, r = 10))
+melt(results_list[1,], id = c("ks", "fhp_res")) |> mutate(ks = as.character(ks)) |>
+  group_by(ks) |> summarise(mean = mean(fhp_res))
+
+# ks      mean
+# <chr>  <dbl>
+#   2     0.104 
+#   3     0.0214
+#   4     0.0444
+#   5     0.0529
+#   6     0.0615
+
+
+# fit <- kmeans(hard_balanced_data$obs_data, centers = 3)
+# fasthplus::hpe(D = dist(hard_balanced_data$obs_data), 
+#                L = fit$cluster, p = 101)
+# 
+# pc <-prcomp(easy_balanced_data$obs_data)
+
+
 plot_fhp_across_k(easy_imbalanced_data, k = 6, t = 10, r = 10)
 plot_fhp_across_k(hard_balanced_data, k = 6, t = 10, r = 10)
 plot_fhp_across_k(hard_imbalanced_data, k = 6, t = 10, r = 10)
@@ -155,11 +206,37 @@ plot_fhp_across_r(hard_balanced_data, k = 6, t = 10, r = 10)
 plot_fhp_across_r(hard_imbalanced_data, k = 6, t = 10, r = 10)
 
 
+##create plot pdfs 
+# all_data<- c(easy_balanced_data,easy_imbalanced_data,hard_balanced_data,
+#              hard_imbalanced_data)
+# dir_plots <-
+#   here::here("plots", "01_across_k", type)
+# dir.create(dir_plots, showWarnings = FALSE)
+# 
 
 
-#returns "counts data" and true "cluster id" for each observation 
 
+m<-100
+n <- 500
+cl1 <- sapply(1:n, function(i) rnorm(n=m,mean=0.5,sd=1))
+cl2 <- sapply(1:n, function(i) rnorm(n=m,mean=-0.5,sd=1))
+cl3 <- sapply(1:n, function(i) rnorm(n=m,mean=-0.5,sd=1))
+dat <- t(cbind(cl1,cl2,cl3))
+d <- dist(dat)
+l <- c(rep(0,n),rep(1,n))
+pc <- prcomp(dat)$x[,1:3]
+cols <- ifelse(l==1,'#0000ff64','#ff000064')
+plot(x=pc[,1],y=pc[,2],pch=16,col=cols,cex=0.7,xaxs = "i",yaxs = "i",xlab='PC1',ylab='PC2',xaxt='n',yaxt='n')
+#legend('top',legend=c(expression('Cl'[1]), expression('Cl'[2])), pch=c(21,21),
+       #col= c('blue','red'),cex=1.5, pt.bg=c('#0000ff64','#ff000064'),bty='n')
 
+ks<- 2:6
+kmeans_for_ks <- ks |> map(function(x) kmeans(dat, centers =x))
+fhp_res <- kmeans_for_ks |> map(function(x) fasthplus::hpe(D = dist(dat), 
+                                                           L = x$cluster,
+                                                           alg = "grid_search",
+                                                           p= 1001)) 
+fasthplus::hpe(D=d,L=l,p=1001) # D,L formulation
 
-
-#Explore what happens when you apply hpb()  varying the number of bootstrap samples (`r).
+##TODO 
+##debug simulated data, explore hpe in easy and hard settings 
